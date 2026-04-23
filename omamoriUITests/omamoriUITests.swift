@@ -2,7 +2,7 @@
 //  omamoriUITests.swift
 //  omamoriUITests
 //
-//  Created by bree on 2026-04-23.
+//  Created by RickLiu1203 on 2026-04-23.
 //
 
 import XCTest

@@ -6,8 +6,28 @@
 	<dict>
 		<key>omamori.xcscheme_^#shared#^_</key>
 		<dict>
+			<key>isShown</key>
+			<true/>
 			<key>orderHint</key>
 			<integer>0</integer>
+		</dict>
+	</dict>
+	<key>SuppressBuildableAutocreation</key>
+	<dict>
+		<key>31CFF12E2F9A775600A30945</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>31CFF13B2F9A775900A30945</key>
+		<dict>
+			<key>primary</key>
+			<true/>
+		</dict>
+		<key>31CFF1452F9A775900A30945</key>
+		<dict>
+			<key>primary</key>
+			<true/>
 		</dict>
 	</dict>
 </dict>
