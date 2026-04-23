@@ -20,6 +20,10 @@ final class SafetyViewModel {
     var neighborhood: String?
     var country: String?
     var fullAddress: String?
+    var street: String?
+    var region: String?
+    var areasOfInterest: [String]?
+    var placeName: String?
 
     var safetyResult: String?
 
@@ -31,20 +35,26 @@ final class SafetyViewModel {
         (city != nil || country != nil) && !isLoadingSafety
     }
 
-    private let locationManager = LocationManager()
+    private let locationService = LocationService()
 
     func fetchLocation() async {
         isLoadingLocation = true
         errorMessage = nil
 
         do {
-            let location = try await locationManager.requestLocation()
+            let location = try await locationService.requestLocation()
             userLocation = location
 
-            let placemark = try await locationManager.reverseGeocode(location)
+            let placemark = try await locationService.reverseGeocode(location)
             city = placemark.locality
             neighborhood = placemark.subLocality
             country = placemark.country
+            street = [placemark.subThoroughfare, placemark.thoroughfare]
+                .compactMap { $0 }
+                .joined(separator: " ")
+            region = placemark.administrativeArea
+            areasOfInterest = placemark.areasOfInterest
+            placeName = placemark.name
             fullAddress = [placemark.subLocality, placemark.locality,
                            placemark.administrativeArea, placemark.country]
                 .compactMap { $0 }
@@ -77,7 +87,11 @@ final class SafetyViewModel {
                 neighborhood: neighborhood,
                 country: country,
                 latitude: location.coordinate.latitude,
-                longitude: location.coordinate.longitude
+                longitude: location.coordinate.longitude,
+                street: street,
+                region: region,
+                areasOfInterest: areasOfInterest,
+                placeName: placeName
             )
         } catch {
             errorMessage = error.localizedDescription

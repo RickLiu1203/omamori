@@ -1,5 +1,5 @@
 //
-//  LocationManager.swift
+//  LocationService.swift
 //  omamori
 //
 //  Created by RickLiu1203 on 2026-04-23.
@@ -25,7 +25,7 @@ enum LocationError: LocalizedError {
 }
 
 @MainActor
-final class LocationManager: NSObject, CLLocationManagerDelegate {
+final class LocationService: NSObject, CLLocationManagerDelegate {
     private let manager = CLLocationManager()
     private var locationContinuation: CheckedContinuation<CLLocation, Error>?
     private var authContinuation: CheckedContinuation<Void, Never>?
