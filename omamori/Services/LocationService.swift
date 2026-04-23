@@ -88,7 +88,9 @@ final class LocationService: NSObject, CLLocationManagerDelegate {
     }
 
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        let status = manager.authorizationStatus
         Task { @MainActor in
+            guard status != .notDetermined else { return }
             authContinuation?.resume()
             authContinuation = nil
         }
