@@ -26,11 +26,12 @@ final class SafetyViewModel {
     var areasOfInterest: [String]?
     var placeName: String?
 
-    var safetyResult: String?
+    var safetyResult: SafetyAssessment?
 
     var isLoadingLocation = false
     var isLoadingSafety = false
     var isPinSettled = true
+    var isDragging = false
     var errorMessage: String?
 
     var isUsingCurrentLocation: Bool {
@@ -54,6 +55,7 @@ final class SafetyViewModel {
     private var debounceTask: Task<Void, Never>?
 
     func onCameraMoving() {
+        isDragging = true
         isPinSettled = false
     }
 
@@ -61,8 +63,9 @@ final class SafetyViewModel {
         debounceTask?.cancel()
         isPinSettled = false
         debounceTask = Task {
-            try? await Task.sleep(for: .milliseconds(400))
+            try? await Task.sleep(for: .milliseconds(300))
             guard !Task.isCancelled else { return }
+            isDragging = false
             isPinSettled = true
             await mapCameraDidChange(center: center)
         }
@@ -138,6 +141,12 @@ final class SafetyViewModel {
         safetyResult = nil
 
         do {
+            let resolvedNeighborhood = neighborhood ?? placeName ?? city
+            let research = try await OpenAIService.fetchWebResearch(
+                neighborhood: resolvedNeighborhood,
+                city: city,
+                country: country
+            )
             safetyResult = try await OpenAIService.fetchSafetyAssessment(
                 city: city,
                 neighborhood: neighborhood,
@@ -147,7 +156,8 @@ final class SafetyViewModel {
                 street: street,
                 region: region,
                 areasOfInterest: areasOfInterest,
-                placeName: placeName
+                placeName: placeName,
+                webResearch: research
             )
         } catch {
             errorMessage = error.localizedDescription

@@ -28,7 +28,7 @@ struct ContentView: View {
                     viewModel.scheduleCameraUpdate(center: context.camera.centerCoordinate)
                 }
 
-                if !viewModel.isUsingCurrentLocation {
+                if viewModel.isDragging || !viewModel.isUsingCurrentLocation {
                     Image(systemName: "mappin")
                         .font(.system(size: 28))
                         .foregroundStyle(.red)
@@ -83,16 +83,7 @@ struct ContentView: View {
                     }
 
                     if let result = viewModel.safetyResult {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text("Safety Assessment")
-                                .font(.headline)
-                            Text(result)
-                                .font(.body)
-                        }
-                        .padding()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(Color(.systemGray6))
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
+                        safetyCard(result)
                     }
                 }
                 .padding()
@@ -101,6 +92,76 @@ struct ContentView: View {
         .task {
             await viewModel.fetchLocation()
         }
+    }
+
+    private func safetyCard(_ result: SafetyAssessment) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(result.neighborhood)
+                .font(.headline)
+
+            HStack(alignment: .firstTextBaseline) {
+                Text(String(format: "%.1f", result.overallRating))
+                    .font(.system(size: 40, weight: .bold, design: .rounded))
+                Text("/ 10")
+                    .font(.title3)
+                    .foregroundStyle(.secondary)
+            }
+
+            Divider()
+
+            let sub = result.subcategories
+            categoryRow("bag.fill", "Petty Theft", sub.pettyTheft)
+            categoryRow("hand.raised.fill", "Robbery", sub.robbery)
+            categoryRow("figure.boxing", "Assault", sub.assault)
+            categoryRow("exclamationmark.bubble.fill", "Sexual Harassment", sub.sexualHarassment)
+            categoryRow("lock.trianglebadge.exclamationmark.fill", "Kidnapping", sub.kidnapping)
+            categoryRow("person.fill.xmark", "Hate Crime", sub.hateCrime)
+            categoryRow("creditcard.trianglebadge.exclamationmark.fill", "Scams", sub.scams)
+            categoryRow("moon.fill", "Night Safety", sub.nightSafety)
+            categoryRow("building.fill", "Organized Crime", sub.organizedCrime)
+            categoryRow("syringe.fill", "Homelessness & Drugs", sub.homelessnessAndDrugs)
+
+            let warn = result.warnings
+            let threshold = SafetyAssessment.warningThreshold
+            if warn.soloTravel.rating <= threshold || warn.femaleTravel.rating <= threshold {
+                Divider()
+                if warn.soloTravel.rating <= threshold {
+                    categoryRow("figure.walk", "Solo Travel", warn.soloTravel)
+                        .padding(8)
+                        .background(Color.orange.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+                if warn.femaleTravel.rating <= threshold {
+                    categoryRow("figure.dress.line.vertical.figure", "Female Travel", warn.femaleTravel)
+                        .padding(8)
+                        .background(Color.orange.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.systemGray6))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+
+    private func categoryRow(_ icon: String, _ name: String, _ category: SafetyAssessment.Category) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Image(systemName: icon)
+                    .frame(width: 20)
+                Text(name)
+                    .font(.subheadline.weight(.medium))
+                Spacer()
+                Text("\(category.rating)/10")
+                    .font(.subheadline.weight(.semibold))
+                    .monospacedDigit()
+            }
+            Text(category.summary)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 4)
     }
 
     private var locationCard: some View {
