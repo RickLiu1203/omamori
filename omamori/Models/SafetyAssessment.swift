@@ -7,10 +7,14 @@
 
 import Foundation
 
-struct SafetyAssessment: Decodable {
+struct SafetyAssessment: Decodable, Identifiable {
     let neighborhood: String
+    let touristTopRisks: [String]
+    let residentTopRisks: [String]
     let subcategories: Subcategories
     let warnings: Warnings
+
+    var id: String { neighborhood }
 
     static let warningThreshold = 5
 
@@ -20,14 +24,25 @@ struct SafetyAssessment: Decodable {
             subcategories.robbery.rating,
             subcategories.assault.rating,
             subcategories.sexualHarassment.rating,
-            subcategories.kidnapping.rating,
             subcategories.hateCrime.rating,
-            subcategories.scams.rating,
+            subcategories.scamsAndFraud.rating,
             subcategories.nightSafety.rating,
-            subcategories.organizedCrime.rating,
-            subcategories.homelessnessAndDrugs.rating
+            subcategories.streetSafety.rating,
+            subcategories.transportationSafety.rating
         ]
         return Double(ratings.reduce(0, +)) / Double(ratings.count)
+    }
+
+    struct Category: Decodable {
+        let rating: Int
+        let touristHeadline: String
+        let residentHeadline: String
+
+        enum CodingKeys: String, CodingKey {
+            case rating
+            case touristHeadline = "tourist_headline"
+            case residentHeadline = "resident_headline"
+        }
     }
 
     struct Subcategories: Decodable {
@@ -35,39 +50,42 @@ struct SafetyAssessment: Decodable {
         let robbery: Category
         let assault: Category
         let sexualHarassment: Category
-        let kidnapping: Category
         let hateCrime: Category
-        let scams: Category
+        let scamsAndFraud: Category
         let nightSafety: Category
-        let organizedCrime: Category
-        let homelessnessAndDrugs: Category
+        let streetSafety: Category
+        let transportationSafety: Category
 
         enum CodingKeys: String, CodingKey {
             case pettyTheft = "petty_theft"
             case robbery
             case assault
             case sexualHarassment = "sexual_harassment"
-            case kidnapping
             case hateCrime = "hate_crime"
-            case scams
+            case scamsAndFraud = "scams_and_fraud"
             case nightSafety = "night_safety"
-            case organizedCrime = "organized_crime"
-            case homelessnessAndDrugs = "homelessness_and_drugs"
+            case streetSafety = "street_safety"
+            case transportationSafety = "transportation_safety"
         }
     }
 
     struct Warnings: Decodable {
         let soloTravel: Category
         let femaleTravel: Category
+        let lgbtqTravel: Category
 
         enum CodingKeys: String, CodingKey {
             case soloTravel = "solo_travel"
             case femaleTravel = "female_travel"
+            case lgbtqTravel = "lgbtq_travel"
         }
     }
 
-    struct Category: Decodable {
-        let rating: Int
-        let summary: String
+    enum CodingKeys: String, CodingKey {
+        case neighborhood
+        case touristTopRisks = "tourist_top_risks"
+        case residentTopRisks = "resident_top_risks"
+        case subcategories
+        case warnings
     }
 }

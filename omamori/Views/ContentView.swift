@@ -38,7 +38,7 @@ struct ContentView: View {
                         .animation(.spring(duration: 0.35, bounce: 0.5), value: viewModel.isPinSettled)
                 }
             }
-            .frame(height: UIScreen.main.bounds.height * 0.45)
+            .frame(height: UIScreen.main.bounds.height * 0.55)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
@@ -94,6 +94,7 @@ struct ContentView: View {
         }
     }
 
+    // Temporary inline card — replaced by ResultsSheetView in Step 6
     private func safetyCard(_ result: SafetyAssessment) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(result.neighborhood)
@@ -110,20 +111,19 @@ struct ContentView: View {
             Divider()
 
             let sub = result.subcategories
-            categoryRow("bag.fill", "Petty Theft", sub.pettyTheft)
-            categoryRow("hand.raised.fill", "Robbery", sub.robbery)
-            categoryRow("figure.boxing", "Assault", sub.assault)
-            categoryRow("exclamationmark.bubble.fill", "Sexual Harassment", sub.sexualHarassment)
-            categoryRow("lock.trianglebadge.exclamationmark.fill", "Kidnapping", sub.kidnapping)
-            categoryRow("person.fill.xmark", "Hate Crime", sub.hateCrime)
-            categoryRow("creditcard.trianglebadge.exclamationmark.fill", "Scams", sub.scams)
-            categoryRow("moon.fill", "Night Safety", sub.nightSafety)
-            categoryRow("building.fill", "Organized Crime", sub.organizedCrime)
-            categoryRow("syringe.fill", "Homelessness & Drugs", sub.homelessnessAndDrugs)
+            categoryRow("creditcard.trianglebadge.exclamationmark.fill", "Scams & Fraud",    sub.scamsAndFraud)
+            categoryRow("moon.fill",                                      "Night Safety",     sub.nightSafety)
+            categoryRow("bus.fill",                                       "Transportation",   sub.transportationSafety)
+            categoryRow("bag.fill",                                       "Petty Theft",      sub.pettyTheft)
+            categoryRow("hand.raised.fill",                               "Robbery",          sub.robbery)
+            categoryRow("figure.boxing",                                  "Assault",          sub.assault)
+            categoryRow("exclamationmark.bubble.fill",                    "Sexual Harassment", sub.sexualHarassment)
+            categoryRow("person.fill.xmark",                              "Hate Crime",       sub.hateCrime)
+            categoryRow("road.lanes",                                     "Street Safety",    sub.streetSafety)
 
             let warn = result.warnings
             let threshold = SafetyAssessment.warningThreshold
-            if warn.soloTravel.rating <= threshold || warn.femaleTravel.rating <= threshold {
+            if warn.soloTravel.rating <= threshold || warn.femaleTravel.rating <= threshold || warn.lgbtqTravel.rating <= threshold {
                 Divider()
                 if warn.soloTravel.rating <= threshold {
                     categoryRow("figure.walk", "Solo Travel", warn.soloTravel)
@@ -133,6 +133,12 @@ struct ContentView: View {
                 }
                 if warn.femaleTravel.rating <= threshold {
                     categoryRow("figure.dress.line.vertical.figure", "Female Travel", warn.femaleTravel)
+                        .padding(8)
+                        .background(Color.orange.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 8))
+                }
+                if warn.lgbtqTravel.rating <= threshold {
+                    categoryRow("rainbow", "LGBTQ+ Travel", warn.lgbtqTravel)
                         .padding(8)
                         .background(Color.orange.opacity(0.12))
                         .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -157,7 +163,7 @@ struct ContentView: View {
                     .font(.subheadline.weight(.semibold))
                     .monospacedDigit()
             }
-            Text(category.summary)
+            Text(category.touristHeadline)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

@@ -38,7 +38,7 @@ enum OpenAIService {
             let additionalProperties: Bool
         }
 
-        struct SchemaProperty: Encodable {
+        final class SchemaProperty: Encodable {
             let type: String?
             let description: String?
             let properties: [String: SchemaProperty]?
@@ -46,6 +46,7 @@ enum OpenAIService {
             let additionalProperties: Bool?
             let minimum: Int?
             let maximum: Int?
+            let items: SchemaProperty?
 
             init(
                 type: String? = nil,
@@ -54,7 +55,8 @@ enum OpenAIService {
                 required: [String]? = nil,
                 additionalProperties: Bool? = nil,
                 minimum: Int? = nil,
-                maximum: Int? = nil
+                maximum: Int? = nil,
+                items: SchemaProperty? = nil
             ) {
                 self.type = type
                 self.description = description
@@ -63,6 +65,7 @@ enum OpenAIService {
                 self.additionalProperties = additionalProperties
                 self.minimum = minimum
                 self.maximum = maximum
+                self.items = items
             }
         }
     }
@@ -105,39 +108,55 @@ enum OpenAIService {
 
     private static let calibrationAnchors = """
     CALIBRATION ANCHORS (baseline — override with web research if outdated):
-    Format: neighborhood | petty_theft | robbery | assault | sexual_har | kidnapping | hate_crime | scams | night | org_crime | homeless_drugs | solo | female
+    Format: neighborhood | petty_theft | robbery | assault | sexual_har | hate_crime | scams_fraud | night | transport | street | solo | female | lgbtq
 
-    Singapore Marina Bay:        9|10|10|8|10|9|8|9|10|9|10|9
-    Reykjavik 101:               8|10|9|9|10|9|9|9|10|8|10|9
-    Tokyo Marunouchi:            9|10|10|5|10|8|9|9|9|9|9|6
-    Zurich Bahnhofstrasse:       9|10|10|9|10|9|9|9|10|9|10|9
-    Barcelona Gothic Quarter:    2|5|7|7|9|8|5|7|7|6|7|6
-    Prague Old Town:             4|8|8|8|10|7|2|7|8|7|8|7
-    Seoul Itaewon:               7|8|6|5|9|3|7|5|9|6|7|5
-    Buenos Aires San Telmo:      3|4|6|6|7|8|5|5|7|6|6|5
-    Marrakech Medina:            5|8|8|3|8|7|2|6|7|6|4|2
-    Paris Gare du Nord:          3|5|5|5|9|7|5|4|7|3|5|4
-    Shinjuku Kabukicho:          6|8|7|3|9|7|2|4|7|5|5|3
-    Hamilton ON Downtown:        6|6|5|7|9|7|8|5|6|2|5|6
-    Bangkok Khao San Road:       4|7|7|5|8|7|2|5|7|4|6|4
-    Cairo Khan el-Khalili:       5|7|7|2|7|6|3|5|6|5|4|2
-    LA Skid Row:                 4|3|3|4|8|6|6|2|7|1|2|3
-    Johannesburg Hillbrow:       3|2|2|3|4|5|5|2|4|4|2|2
-    Naples Quartieri Spagnoli:   2|3|5|6|7|7|5|4|2|5|4|5
-    Tijuana Zona Norte:          5|3|3|3|3|6|4|2|1|4|2|2
-    Caracas Petare:              2|1|1|2|1|5|4|1|2|3|1|1
-    Maiduguri Old Town Nigeria:  5|3|2|4|1|4|6|2|1|5|1|1
+    Singapore Marina Bay:        9|10|10|8|9|8|9|10|10|10|9|10
+    Reykjavik 101:               8|10|9|9|9|9|9|10|10|10|9|10
+    Tokyo Marunouchi:            9|10|10|5|8|9|9|9|9|9|6|8
+    Zurich Bahnhofstrasse:       9|10|10|9|9|9|9|10|10|10|9|10
+    Barcelona Gothic Quarter:    2|5|7|7|8|5|7|8|5|7|6|8
+    Prague Old Town:             4|8|8|8|7|2|7|8|7|8|7|8
+    Seoul Itaewon:               7|8|6|5|3|7|5|8|6|7|5|6
+    Buenos Aires San Telmo:      3|4|6|6|8|5|5|6|6|6|5|7
+    Marrakech Medina:            5|8|8|3|7|2|6|5|6|4|2|3
+    Paris Gare du Nord:          3|5|5|5|7|5|4|6|3|5|4|7
+    Shinjuku Kabukicho:          6|8|7|3|7|2|4|6|5|5|3|5
+    Hamilton ON Downtown:        6|6|5|7|7|8|5|6|2|5|6|8
+    Bangkok Khao San Road:       4|7|7|5|7|2|5|5|4|6|4|6
+    Cairo Khan el-Khalili:       5|7|7|2|6|3|5|4|5|4|2|2
+    LA Skid Row:                 4|3|3|4|6|6|2|5|1|2|3|5
+    Johannesburg Hillbrow:       3|2|2|3|5|5|2|4|4|2|2|3
+    Naples Quartieri Spagnoli:   2|3|5|6|7|5|4|3|5|4|5|6
+    Tijuana Zona Norte:          5|3|3|3|6|4|2|3|4|2|2|4
+    Caracas Petare:              2|1|1|2|5|4|1|1|3|1|1|2
+    Maiduguri Old Town Nigeria:  5|3|2|4|4|6|2|2|5|1|1|2
     """
 
     private static var responseFormat: ChatRequest.ResponseFormat {
         let categorySchema = ChatRequest.SchemaProperty(
             type: "object",
             properties: [
-                "rating": ChatRequest.SchemaProperty(type: "integer", description: "Rating from 1 to 10 (10 = safest)"),
-                "summary": ChatRequest.SchemaProperty(type: "string", description: "1-2 sentence neighborhood-specific explanation")
+                "rating": ChatRequest.SchemaProperty(
+                    type: "integer",
+                    description: "Rating from 1 to 10 (10 = safest)"
+                ),
+                "tourist_headline": ChatRequest.SchemaProperty(
+                    type: "string",
+                    description: "4–6 word tourist-perspective headline, standalone phrase"
+                ),
+                "resident_headline": ChatRequest.SchemaProperty(
+                    type: "string",
+                    description: "4–6 word resident-perspective headline, standalone phrase"
+                )
             ],
-            required: ["rating", "summary"],
+            required: ["rating", "tourist_headline", "resident_headline"],
             additionalProperties: false
+        )
+
+        let stringArraySchema = ChatRequest.SchemaProperty(
+            type: "array",
+            description: "2–3 items, each ≤8 words",
+            items: ChatRequest.SchemaProperty(type: "string")
         )
 
         return ChatRequest.ResponseFormat(
@@ -148,35 +167,47 @@ enum OpenAIService {
                 schema: ChatRequest.JSONSchema(
                     type: "object",
                     properties: [
-                        "neighborhood": ChatRequest.SchemaProperty(type: "string", description: "Resolved neighborhood name"),
+                        "neighborhood": ChatRequest.SchemaProperty(
+                            type: "string",
+                            description: "Resolved neighborhood name"
+                        ),
+                        "tourist_top_risks": stringArraySchema,
+                        "resident_top_risks": stringArraySchema,
                         "subcategories": ChatRequest.SchemaProperty(
                             type: "object",
                             properties: [
-                                "petty_theft": categorySchema,
-                                "robbery": categorySchema,
-                                "assault": categorySchema,
-                                "sexual_harassment": categorySchema,
-                                "kidnapping": categorySchema,
-                                "hate_crime": categorySchema,
-                                "scams": categorySchema,
-                                "night_safety": categorySchema,
-                                "organized_crime": categorySchema,
-                                "homelessness_and_drugs": categorySchema
+                                "petty_theft":          categorySchema,
+                                "robbery":              categorySchema,
+                                "assault":              categorySchema,
+                                "sexual_harassment":    categorySchema,
+                                "hate_crime":           categorySchema,
+                                "scams_and_fraud":      categorySchema,
+                                "night_safety":         categorySchema,
+                                "street_safety":        categorySchema,
+                                "transportation_safety": categorySchema
                             ],
-                            required: ["petty_theft", "robbery", "assault", "sexual_harassment", "kidnapping", "hate_crime", "scams", "night_safety", "organized_crime", "homelessness_and_drugs"],
+                            required: [
+                                "petty_theft", "robbery", "assault", "sexual_harassment",
+                                "hate_crime", "scams_and_fraud", "night_safety",
+                                "street_safety", "transportation_safety"
+                            ],
                             additionalProperties: false
                         ),
                         "warnings": ChatRequest.SchemaProperty(
                             type: "object",
                             properties: [
-                                "solo_travel": categorySchema,
-                                "female_travel": categorySchema
+                                "solo_travel":   categorySchema,
+                                "female_travel": categorySchema,
+                                "lgbtq_travel":  categorySchema
                             ],
-                            required: ["solo_travel", "female_travel"],
+                            required: ["solo_travel", "female_travel", "lgbtq_travel"],
                             additionalProperties: false
                         )
                     ],
-                    required: ["neighborhood", "subcategories", "warnings"],
+                    required: [
+                        "neighborhood", "tourist_top_risks", "resident_top_risks",
+                        "subcategories", "warnings"
+                    ],
                     additionalProperties: false
                 )
             )
@@ -201,7 +232,7 @@ enum OpenAIService {
         city-specific subreddits), TripAdvisor, Nomad List, and expat \
         forums for recent posts about safety in \(neighborhood). What do \
         real visitors and residents say about: crime, nightlife safety, \
-        scams, harassment, organized crime, homelessness, drug activity?
+        scams and fraud, harassment, street conditions, transportation safety?
 
         Priority 3 — Anchor validation: Also briefly check current safety \
         info for 3-4 of these reference neighborhoods that are most \
@@ -313,24 +344,30 @@ enum OpenAIService {
         the anchor scale. If this area is safer than Barcelona Gothic \
         Quarter for pickpocketing, score higher than 2. If more dangerous \
         than Zurich for assault, score lower than 10.
-        - Ground your summaries in the web research — cite specific \
+        - Ground your headings in the web research — cite specific \
         incidents, forum posts, or patterns found.
 
-        Rate each subcategory 1-10 (10 = safest):
-        - petty_theft, robbery, assault, sexual_harassment, kidnapping, \
-        hate_crime, scams, night_safety, organized_crime, homelessness_and_drugs
+        Rate each subcategory 1–10 (10 = safest):
+        - petty_theft, robbery, assault, sexual_harassment, hate_crime, \
+        scams_and_fraud, night_safety, street_safety, transportation_safety
+
+        For each subcategory AND each warning, provide:
+        - tourist_headline: 4–6 word tourist-perspective summary (standalone phrase, \
+        no generic advice — name a pattern or place)
+        - resident_headline: 4–6 word resident-perspective summary (standalone phrase)
 
         Warnings (not part of overall score):
-        - solo_travel, female_travel
+        - solo_travel, female_travel, lgbtq_travel
 
-        Each summary must name real streets, landmarks, or patterns. No \
-        generic advice.
+        Also provide at the top level:
+        - tourist_top_risks: 2–3 biggest risks for tourists, each ≤8 words
+        - resident_top_risks: 2–3 biggest risks for residents, each ≤8 words
         """
 
         let requestBody = ChatRequest(
             model: "gpt-4o-mini",
             messages: [.init(role: "user", content: prompt)],
-            max_tokens: 1200,
+            max_tokens: 1800,
             response_format: responseFormat
         )
 

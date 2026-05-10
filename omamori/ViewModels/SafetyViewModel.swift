@@ -27,12 +27,16 @@ final class SafetyViewModel {
     var placeName: String?
 
     var safetyResult: SafetyAssessment?
+    var selectedMode: SafetyMode = .tourist
 
     var isLoadingLocation = false
     var isLoadingSafety = false
     var isPinSettled = true
     var isDragging = false
     var errorMessage: String?
+
+    var lastAssessedCoordinate: CLLocationCoordinate2D?
+    var isResultsSheetPresented = false
 
     var isUsingCurrentLocation: Bool {
         guard let selected = selectedCoordinate, let user = userLocation else { return true }
@@ -49,6 +53,88 @@ final class SafetyViewModel {
 
     var canCheckSafety: Bool {
         (city != nil || country != nil) && !isLoadingSafety
+    }
+
+    var canReuseResult: Bool {
+        guard safetyResult != nil,
+              let last = lastAssessedCoordinate,
+              let active = activeCoordinate else { return false }
+        let lastLoc = CLLocation(latitude: last.latitude, longitude: last.longitude)
+        let activeLoc = CLLocation(latitude: active.latitude, longitude: active.longitude)
+        return activeLoc.distance(from: lastLoc) < 50
+    }
+
+    var scoreColor: Color {
+        let rating = safetyResult?.overallRating ?? 0
+        switch rating {
+        case 8...: return .green
+        case 6..<8: return .yellow
+        case 4..<6: return .orange
+        default: return .red
+        }
+    }
+
+    var scoreFraction: Double {
+        (safetyResult?.overallRating ?? 0) / 10.0
+    }
+
+    var sheetHeaderTitle: String {
+        guard let n = safetyResult?.neighborhood else { return "" }
+        if let c = city { return "\(n) · \(c)" }
+        return n
+    }
+
+    var currentTopRisks: [String] {
+        guard let result = safetyResult else { return [] }
+        return selectedMode == .tourist ? result.touristTopRisks : result.residentTopRisks
+    }
+
+    var currentCategories: [CategoryDisplayItem] {
+        guard let sub = safetyResult?.subcategories else { return [] }
+
+        let all: [(id: String, icon: String, name: String, cat: SafetyAssessment.Category)] = [
+            ("pettyTheft",          "bag.fill",                                      "Petty Theft",         sub.pettyTheft),
+            ("robbery",             "hand.raised.fill",                              "Robbery",             sub.robbery),
+            ("assault",             "figure.boxing",                                 "Assault",             sub.assault),
+            ("sexualHarassment",    "exclamationmark.bubble.fill",                   "Sexual Harassment",   sub.sexualHarassment),
+            ("hateCrime",           "person.fill.xmark",                             "Hate Crime",          sub.hateCrime),
+            ("scamsAndFraud",       "creditcard.trianglebadge.exclamationmark.fill", "Scams & Fraud",       sub.scamsAndFraud),
+            ("nightSafety",         "moon.fill",                                     "Night Safety",        sub.nightSafety),
+            ("streetSafety",        "road.lanes",                                    "Street Safety",       sub.streetSafety),
+            ("transportationSafety","bus.fill",                                      "Transportation",      sub.transportationSafety)
+        ]
+
+        let touristOrder = ["scamsAndFraud", "nightSafety", "transportationSafety", "pettyTheft",
+                            "robbery", "assault", "sexualHarassment", "hateCrime", "streetSafety"]
+        let residentOrder = ["streetSafety", "assault", "nightSafety", "robbery", "pettyTheft",
+                             "sexualHarassment", "hateCrime", "scamsAndFraud", "transportationSafety"]
+
+        let order = selectedMode == .tourist ? touristOrder : residentOrder
+        let dict = Dictionary(uniqueKeysWithValues: all.map { ($0.id, $0) })
+
+        return order.compactMap { id in
+            guard let item = dict[id] else { return nil }
+            let headline = selectedMode == .tourist ? item.cat.touristHeadline : item.cat.residentHeadline
+            return CategoryDisplayItem(id: item.id, icon: item.icon, name: item.name, rating: item.cat.rating, headline: headline)
+        }
+    }
+
+    var activeWarnings: [WarningDisplayItem] {
+        guard let result = safetyResult else { return [] }
+        let threshold = SafetyAssessment.warningThreshold
+        let w = result.warnings
+
+        let candidates: [(id: String, icon: String, name: String, cat: SafetyAssessment.Category)] = [
+            ("soloTravel",   "figure.walk",                        "Solo Travel",   w.soloTravel),
+            ("femaleTravel", "figure.dress.line.vertical.figure",  "Female Travel", w.femaleTravel),
+            ("lgbtqTravel",  "rainbow",                            "LGBTQ+ Travel", w.lgbtqTravel)
+        ]
+
+        return candidates.compactMap { item in
+            guard item.cat.rating <= threshold else { return nil }
+            let headline = selectedMode == .tourist ? item.cat.touristHeadline : item.cat.residentHeadline
+            return WarningDisplayItem(id: item.id, icon: item.icon, name: item.name, rating: item.cat.rating, headline: headline)
+        }
     }
 
     private let locationService = LocationService()
@@ -97,6 +183,8 @@ final class SafetyViewModel {
     func returnToCurrentLocation() async {
         guard let user = userLocation else { return }
         selectedCoordinate = nil
+        safetyResult = nil
+        isResultsSheetPresented = false
         mapCameraPosition = .region(MKCoordinateRegion(
             center: user.coordinate,
             latitudinalMeters: 1000,
@@ -131,6 +219,17 @@ final class SafetyViewModel {
         isLoadingLocation = false
     }
 
+    func requestSafetyCheck() async {
+        if canReuseResult {
+            isResultsSheetPresented = true
+        } else {
+            await checkSafety()
+            if safetyResult != nil {
+                isResultsSheetPresented = true
+            }
+        }
+    }
+
     func checkSafety() async {
         guard let coordinate = activeCoordinate,
               let city = city,
@@ -159,6 +258,7 @@ final class SafetyViewModel {
                 placeName: placeName,
                 webResearch: research
             )
+            lastAssessedCoordinate = activeCoordinate
         } catch {
             errorMessage = error.localizedDescription
         }
