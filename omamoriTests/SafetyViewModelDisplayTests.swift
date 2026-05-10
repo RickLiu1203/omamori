@@ -10,140 +10,161 @@ import SwiftUI
 @MainActor
 @Suite struct SafetyViewModelDisplayTests {
 
-    private func makeCategory(
-        rating: Int,
-        touristHeadline: String = "Tourist headline here",
-        residentHeadline: String = "Resident headline here"
-    ) -> SafetyAssessment.Category {
-        SafetyAssessment.Category(rating: rating, touristHeadline: touristHeadline, residentHeadline: residentHeadline)
+    private func makeCategory(rating: Int, headline: String = "Test headline") -> SafetyAssessment.Category {
+        SafetyAssessment.Category(rating: rating, headline: headline)
     }
 
-    private func makeAssessment(allRatings: Int) -> SafetyAssessment {
-        let cat = makeCategory(rating: allRatings)
-        return SafetyAssessment(
+    private func makeSafetyCategories(rating: Int) -> SafetyAssessment.SafetyCategories {
+        let cat = makeCategory(rating: rating)
+        return .init(pettyTheft: cat, robbery: cat, assault: cat, sexualHarassment: cat,
+                     hateCrime: cat, scamsAndFraud: cat, nightSafety: cat, streetSafety: cat,
+                     transportationSafety: cat)
+    }
+
+    private func makeLiveabilityCategories(rating: Int) -> SafetyAssessment.LiveabilityCategories {
+        let cat = makeCategory(rating: rating)
+        return .init(walkability: cat, transitAccess: cat, climateIndex: cat,
+                     pollution: cat, costOfLiving: cat, healthcare: cat)
+    }
+
+    private func makeWarnings(rating: Int) -> SafetyAssessment.Warnings {
+        let cat = makeCategory(rating: rating)
+        return .init(soloTravel: cat, femaleTravel: cat, lgbtqTravel: cat)
+    }
+
+    private func makeAssessment(safetyRating: Int, liveabilityRating: Int = 7) -> SafetyAssessment {
+        SafetyAssessment(
             neighborhood: "Test",
-            touristTopRisks: ["Risk one", "Risk two"],
-            residentTopRisks: ["Risk alpha", "Risk beta"],
-            subcategories: .init(
-                pettyTheft: cat, robbery: cat, assault: cat,
-                sexualHarassment: cat, hateCrime: cat, scamsAndFraud: cat,
-                nightSafety: cat, streetSafety: cat, transportationSafety: cat
-            ),
-            warnings: .init(soloTravel: cat, femaleTravel: cat, lgbtqTravel: cat)
+            safetyTopRisks: ["Risk 1", "Risk 2"],
+            liveabilityHighlights: ["Highlight 1", "Highlight 2"],
+            naturalDisasterConcerns: ["earthquake zone"],
+            safetyCategories: makeSafetyCategories(rating: safetyRating),
+            liveabilityCategories: makeLiveabilityCategories(rating: liveabilityRating),
+            warnings: makeWarnings(rating: safetyRating)
         )
     }
 
-    private func makeAssessmentWithDistinctHeadlines() -> SafetyAssessment {
-        let cat = makeCategory(rating: 7, touristHeadline: "TOURIST_HEADLINE", residentHeadline: "RESIDENT_HEADLINE")
-        return SafetyAssessment(
-            neighborhood: "Test",
-            touristTopRisks: ["Tourist risk one", "Tourist risk two"],
-            residentTopRisks: ["Resident risk one", "Resident risk two"],
-            subcategories: .init(
-                pettyTheft: cat, robbery: cat, assault: cat,
-                sexualHarassment: cat, hateCrime: cat, scamsAndFraud: cat,
-                nightSafety: cat, streetSafety: cat, transportationSafety: cat
-            ),
-            warnings: .init(soloTravel: cat, femaleTravel: cat, lgbtqTravel: cat)
-        )
-    }
-
-    // MARK: - Score Color
+    // MARK: - Score Color (Safety mode)
 
     @Test func scoreColorGreenAboveEight() {
         let vm = SafetyViewModel()
-        vm.safetyResult = makeAssessment(allRatings: 9) // overallRating = 9.0
+        vm.safetyResult = makeAssessment(safetyRating: 9)
+        vm.selectedMode = .safety
         #expect(vm.scoreColor == .green)
     }
 
     @Test func scoreColorYellowSixToEight() {
         let vm = SafetyViewModel()
-        vm.safetyResult = makeAssessment(allRatings: 7) // overallRating = 7.0
+        vm.safetyResult = makeAssessment(safetyRating: 7)
+        vm.selectedMode = .safety
         #expect(vm.scoreColor == .yellow)
     }
 
     @Test func scoreColorOrangeFourToSix() {
         let vm = SafetyViewModel()
-        vm.safetyResult = makeAssessment(allRatings: 5) // overallRating = 5.0
+        vm.safetyResult = makeAssessment(safetyRating: 5)
+        vm.selectedMode = .safety
         #expect(vm.scoreColor == .orange)
     }
 
     @Test func scoreColorRedBelowFour() {
         let vm = SafetyViewModel()
-        vm.safetyResult = makeAssessment(allRatings: 3) // overallRating = 3.0
+        vm.safetyResult = makeAssessment(safetyRating: 3)
+        vm.selectedMode = .safety
         #expect(vm.scoreColor == .red)
     }
 
-    @Test func scoreFractionDividesBy10() {
+    @Test func scoreFractionUsesSafetyScoreInSafetyMode() {
         let vm = SafetyViewModel()
-        vm.safetyResult = makeAssessment(allRatings: 8) // overallRating = 8.0
+        vm.safetyResult = makeAssessment(safetyRating: 8, liveabilityRating: 4)
+        vm.selectedMode = .safety
         #expect(abs(vm.scoreFraction - 0.8) < 0.001)
+    }
+
+    @Test func scoreFractionUsesLiveabilityScoreInLiveabilityMode() {
+        let vm = SafetyViewModel()
+        vm.safetyResult = makeAssessment(safetyRating: 8, liveabilityRating: 6)
+        vm.selectedMode = .liveability
+        #expect(abs(vm.scoreFraction - 0.6) < 0.001)
     }
 
     // MARK: - Current Categories
 
-    @Test func currentCategoriesUsesTouristOrderAndHeadline() {
+    @Test func currentCategoriesReturnsSafetyInSafetyMode() {
         let vm = SafetyViewModel()
-        vm.safetyResult = makeAssessmentWithDistinctHeadlines()
-        vm.selectedMode = .tourist
+        vm.safetyResult = makeAssessment(safetyRating: 7)
+        vm.selectedMode = .safety
         let categories = vm.currentCategories
         #expect(categories.count == 9)
-        #expect(categories[0].id == "scamsAndFraud") // first in tourist order
-        #expect(categories[0].headline == "TOURIST_HEADLINE")
+        #expect(categories[0].id == "scamsAndFraud")
     }
 
-    @Test func currentCategoriesUsesResidentOrderAndHeadline() {
+    @Test func currentCategoriesReturnsLiveabilityInLiveabilityMode() {
         let vm = SafetyViewModel()
-        vm.safetyResult = makeAssessmentWithDistinctHeadlines()
-        vm.selectedMode = .resident
+        vm.safetyResult = makeAssessment(safetyRating: 7)
+        vm.selectedMode = .liveability
         let categories = vm.currentCategories
-        #expect(categories.count == 9)
-        #expect(categories[0].id == "streetSafety") // first in resident order
-        #expect(categories[0].headline == "RESIDENT_HEADLINE")
+        #expect(categories.count == 6)
+        #expect(categories[0].id == "costOfLiving")
     }
 
-    // MARK: - Active Warnings
+    // MARK: - Current Top Risks
+
+    @Test func currentTopRisksReturnsSafetyRisksInSafetyMode() {
+        let vm = SafetyViewModel()
+        vm.safetyResult = makeAssessment(safetyRating: 7)
+        vm.selectedMode = .safety
+        #expect(vm.currentTopRisks == ["Risk 1", "Risk 2"])
+    }
+
+    @Test func currentTopRisksReturnsHighlightsInLiveabilityMode() {
+        let vm = SafetyViewModel()
+        vm.safetyResult = makeAssessment(safetyRating: 7)
+        vm.selectedMode = .liveability
+        #expect(vm.currentTopRisks == ["Highlight 1", "Highlight 2"])
+    }
+
+    // MARK: - Active Warnings (safety-only)
 
     @Test func activeWarningsExcludesAboveThreshold() {
         let vm = SafetyViewModel()
-        // All warnings at 6, above warningThreshold (5) — none should appear
-        let highCat = makeCategory(rating: 6)
-        let lowCat = makeCategory(rating: 7)
-        vm.safetyResult = SafetyAssessment(
-            neighborhood: "Test",
-            touristTopRisks: ["R1", "R2"],
-            residentTopRisks: ["R1", "R2"],
-            subcategories: .init(
-                pettyTheft: lowCat, robbery: lowCat, assault: lowCat,
-                sexualHarassment: lowCat, hateCrime: lowCat, scamsAndFraud: lowCat,
-                nightSafety: lowCat, streetSafety: lowCat, transportationSafety: lowCat
-            ),
-            warnings: .init(soloTravel: highCat, femaleTravel: highCat, lgbtqTravel: highCat)
-        )
+        vm.safetyResult = makeAssessment(safetyRating: 6) // warnings all 6 > threshold 5
+        vm.selectedMode = .safety
         #expect(vm.activeWarnings.isEmpty)
     }
 
     @Test func activeWarningsIncludesBelowOrAtThreshold() {
         let vm = SafetyViewModel()
-        // soloTravel at 4 (≤ warningThreshold of 5), others above
-        let warnCat = makeCategory(rating: 4, touristHeadline: "Solo risk noted", residentHeadline: "Solo risk res")
+        let warnCat = makeCategory(rating: 4, headline: "Solo risk noted")
         let safeCat = makeCategory(rating: 8)
-        let lowCat = makeCategory(rating: 7)
+        let lowSafety = makeCategory(rating: 7)
         vm.safetyResult = SafetyAssessment(
             neighborhood: "Test",
-            touristTopRisks: ["R1", "R2"],
-            residentTopRisks: ["R1", "R2"],
-            subcategories: .init(
-                pettyTheft: lowCat, robbery: lowCat, assault: lowCat,
-                sexualHarassment: lowCat, hateCrime: lowCat, scamsAndFraud: lowCat,
-                nightSafety: lowCat, streetSafety: lowCat, transportationSafety: lowCat
-            ),
+            safetyTopRisks: ["R1", "R2"],
+            liveabilityHighlights: ["H1", "H2"],
+            naturalDisasterConcerns: [],
+            safetyCategories: makeSafetyCategories(rating: 7),
+            liveabilityCategories: makeLiveabilityCategories(rating: 7),
             warnings: .init(soloTravel: warnCat, femaleTravel: safeCat, lgbtqTravel: safeCat)
         )
-        vm.selectedMode = .tourist
+        vm.selectedMode = .safety
         let warnings = vm.activeWarnings
         #expect(warnings.count == 1)
         #expect(warnings[0].id == "soloTravel")
-        #expect(warnings[0].headline == "Solo risk noted")
+    }
+
+    @Test func activeWarningsEmptyInLiveabilityMode() {
+        let vm = SafetyViewModel()
+        vm.safetyResult = makeAssessment(safetyRating: 3) // warnings all 3, would trigger in safety
+        vm.selectedMode = .liveability
+        #expect(vm.activeWarnings.isEmpty)
+    }
+
+    // MARK: - Natural Disaster Concerns
+
+    @Test func naturalDisasterConcernsExposedFromResult() {
+        let vm = SafetyViewModel()
+        vm.safetyResult = makeAssessment(safetyRating: 7)
+        #expect(vm.naturalDisasterConcerns == ["earthquake zone"])
     }
 }

@@ -9,43 +9,50 @@ import Foundation
 
 struct SafetyAssessment: Decodable, Identifiable {
     let neighborhood: String
-    let touristTopRisks: [String]
-    let residentTopRisks: [String]
-    let subcategories: Subcategories
+    let safetyTopRisks: [String]
+    let liveabilityHighlights: [String]
+    let naturalDisasterConcerns: [String]
+    let safetyCategories: SafetyCategories
+    let liveabilityCategories: LiveabilityCategories
     let warnings: Warnings
 
     var id: String { neighborhood }
 
     static let warningThreshold = 5
 
-    var overallRating: Double {
+    var safetyScore: Double {
         let ratings = [
-            subcategories.pettyTheft.rating,
-            subcategories.robbery.rating,
-            subcategories.assault.rating,
-            subcategories.sexualHarassment.rating,
-            subcategories.hateCrime.rating,
-            subcategories.scamsAndFraud.rating,
-            subcategories.nightSafety.rating,
-            subcategories.streetSafety.rating,
-            subcategories.transportationSafety.rating
+            safetyCategories.pettyTheft.rating,
+            safetyCategories.robbery.rating,
+            safetyCategories.assault.rating,
+            safetyCategories.sexualHarassment.rating,
+            safetyCategories.hateCrime.rating,
+            safetyCategories.scamsAndFraud.rating,
+            safetyCategories.nightSafety.rating,
+            safetyCategories.streetSafety.rating,
+            safetyCategories.transportationSafety.rating
+        ]
+        return Double(ratings.reduce(0, +)) / Double(ratings.count)
+    }
+
+    var liveabilityScore: Double {
+        let ratings = [
+            liveabilityCategories.walkability.rating,
+            liveabilityCategories.transitAccess.rating,
+            liveabilityCategories.climateIndex.rating,
+            liveabilityCategories.pollution.rating,
+            liveabilityCategories.costOfLiving.rating,
+            liveabilityCategories.healthcare.rating
         ]
         return Double(ratings.reduce(0, +)) / Double(ratings.count)
     }
 
     struct Category: Decodable {
         let rating: Int
-        let touristHeadline: String
-        let residentHeadline: String
-
-        enum CodingKeys: String, CodingKey {
-            case rating
-            case touristHeadline = "tourist_headline"
-            case residentHeadline = "resident_headline"
-        }
+        let headline: String
     }
 
-    struct Subcategories: Decodable {
+    struct SafetyCategories: Decodable {
         let pettyTheft: Category
         let robbery: Category
         let assault: Category
@@ -69,6 +76,24 @@ struct SafetyAssessment: Decodable, Identifiable {
         }
     }
 
+    struct LiveabilityCategories: Decodable {
+        let walkability: Category
+        let transitAccess: Category
+        let climateIndex: Category
+        let pollution: Category
+        let costOfLiving: Category
+        let healthcare: Category
+
+        enum CodingKeys: String, CodingKey {
+            case walkability
+            case transitAccess = "transit_access"
+            case climateIndex = "climate_index"
+            case pollution
+            case costOfLiving = "cost_of_living"
+            case healthcare
+        }
+    }
+
     struct Warnings: Decodable {
         let soloTravel: Category
         let femaleTravel: Category
@@ -83,9 +108,11 @@ struct SafetyAssessment: Decodable, Identifiable {
 
     enum CodingKeys: String, CodingKey {
         case neighborhood
-        case touristTopRisks = "tourist_top_risks"
-        case residentTopRisks = "resident_top_risks"
-        case subcategories
+        case safetyTopRisks = "safety_top_risks"
+        case liveabilityHighlights = "liveability_highlights"
+        case naturalDisasterConcerns = "natural_disaster_concerns"
+        case safetyCategories = "safety_categories"
+        case liveabilityCategories = "liveability_categories"
         case warnings
     }
 }

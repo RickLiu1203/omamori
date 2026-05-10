@@ -106,8 +106,8 @@ enum OpenAIService {
         }
     }
 
-    private static let calibrationAnchors = """
-    CALIBRATION ANCHORS (baseline — override with web research if outdated):
+    private static let safetyCalibrationAnchors = """
+    SAFETY CALIBRATION ANCHORS:
     Format: neighborhood | petty_theft | robbery | assault | sexual_har | hate_crime | scams_fraud | night | transport | street | solo | female | lgbtq
 
     Singapore Marina Bay:        9|10|10|8|9|8|9|10|10|10|9|10
@@ -132,65 +132,99 @@ enum OpenAIService {
     Maiduguri Old Town Nigeria:  5|3|2|4|4|6|2|2|5|1|1|2
     """
 
+    private static let liveabilityCalibrationAnchors = """
+    LIVEABILITY CALIBRATION ANCHORS (10 = best for residents):
+    Format: neighborhood | walkability | transit | climate | pollution | cost_of_living | healthcare
+    Note: cost_of_living — 10 = very affordable, 1 = extremely expensive
+
+    Singapore Marina Bay:    8|10|6|7|2|10
+    Tokyo Shinjuku:          9|10|6|8|4|9
+    Zurich City Centre:      9|10|7|9|1|10
+    Paris 11th Arr.:         9|9|7|7|4|9
+    Vienna Innere Stadt:     9|10|7|8|3|10
+    Copenhagen Nørrebro:     9|9|7|9|3|10
+    Melbourne CBD:           7|8|7|8|4|8
+    Barcelona Eixample:      9|8|8|7|5|8
+    Bangkok Sukhumvit:       6|7|4|4|7|7
+    Medellín El Poblado:     6|5|8|6|8|6
+    Cairo Zamalek:           6|4|5|3|6|5
+    Lagos Victoria Island:   4|3|5|3|5|5
+    Mumbai Dharavi:          6|6|5|3|9|4
+    Nairobi CBD:             5|4|7|4|6|5
+    LA Koreatown:            6|5|8|5|4|6
+    """
+
     private static var responseFormat: ChatRequest.ResponseFormat {
         let categorySchema = ChatRequest.SchemaProperty(
             type: "object",
             properties: [
                 "rating": ChatRequest.SchemaProperty(
                     type: "integer",
-                    description: "Rating from 1 to 10 (10 = safest)"
+                    description: "Rating from 1 to 10 (10 = best/safest)"
                 ),
-                "tourist_headline": ChatRequest.SchemaProperty(
+                "headline": ChatRequest.SchemaProperty(
                     type: "string",
-                    description: "4–6 word tourist-perspective headline, standalone phrase"
-                ),
-                "resident_headline": ChatRequest.SchemaProperty(
-                    type: "string",
-                    description: "4–6 word resident-perspective headline, standalone phrase"
+                    description: "4–6 word standalone headline for this category"
                 )
             ],
-            required: ["rating", "tourist_headline", "resident_headline"],
+            required: ["rating", "headline"],
             additionalProperties: false
         )
 
-        let stringArraySchema = ChatRequest.SchemaProperty(
+        let stringArray = ChatRequest.SchemaProperty(
             type: "array",
             description: "2–3 items, each ≤8 words",
+            items: ChatRequest.SchemaProperty(type: "string")
+        )
+
+        let disasterArray = ChatRequest.SchemaProperty(
+            type: "array",
+            description: "0–3 specific natural hazards (e.g. 'earthquake zone', 'flood plains'). Empty if none.",
             items: ChatRequest.SchemaProperty(type: "string")
         )
 
         return ChatRequest.ResponseFormat(
             type: "json_schema",
             json_schema: ChatRequest.JSONSchemaWrapper(
-                name: "safety_assessment",
+                name: "area_assessment",
                 strict: true,
                 schema: ChatRequest.JSONSchema(
                     type: "object",
                     properties: [
-                        "neighborhood": ChatRequest.SchemaProperty(
-                            type: "string",
-                            description: "Resolved neighborhood name"
-                        ),
-                        "tourist_top_risks": stringArraySchema,
-                        "resident_top_risks": stringArraySchema,
-                        "subcategories": ChatRequest.SchemaProperty(
+                        "neighborhood":             ChatRequest.SchemaProperty(type: "string", description: "Resolved neighborhood name"),
+                        "safety_top_risks":         stringArray,
+                        "liveability_highlights":   stringArray,
+                        "natural_disaster_concerns": disasterArray,
+                        "safety_categories": ChatRequest.SchemaProperty(
                             type: "object",
                             properties: [
-                                "petty_theft":          categorySchema,
-                                "robbery":              categorySchema,
-                                "assault":              categorySchema,
-                                "sexual_harassment":    categorySchema,
-                                "hate_crime":           categorySchema,
-                                "scams_and_fraud":      categorySchema,
-                                "night_safety":         categorySchema,
-                                "street_safety":        categorySchema,
+                                "petty_theft":           categorySchema,
+                                "robbery":               categorySchema,
+                                "assault":               categorySchema,
+                                "sexual_harassment":     categorySchema,
+                                "hate_crime":            categorySchema,
+                                "scams_and_fraud":       categorySchema,
+                                "night_safety":          categorySchema,
+                                "street_safety":         categorySchema,
                                 "transportation_safety": categorySchema
                             ],
-                            required: [
-                                "petty_theft", "robbery", "assault", "sexual_harassment",
-                                "hate_crime", "scams_and_fraud", "night_safety",
-                                "street_safety", "transportation_safety"
+                            required: ["petty_theft", "robbery", "assault", "sexual_harassment",
+                                       "hate_crime", "scams_and_fraud", "night_safety",
+                                       "street_safety", "transportation_safety"],
+                            additionalProperties: false
+                        ),
+                        "liveability_categories": ChatRequest.SchemaProperty(
+                            type: "object",
+                            properties: [
+                                "walkability":    categorySchema,
+                                "transit_access": categorySchema,
+                                "climate_index":  categorySchema,
+                                "pollution":      categorySchema,
+                                "cost_of_living": categorySchema,
+                                "healthcare":     categorySchema
                             ],
+                            required: ["walkability", "transit_access", "climate_index",
+                                       "pollution", "cost_of_living", "healthcare"],
                             additionalProperties: false
                         ),
                         "warnings": ChatRequest.SchemaProperty(
@@ -204,10 +238,9 @@ enum OpenAIService {
                             additionalProperties: false
                         )
                     ],
-                    required: [
-                        "neighborhood", "tourist_top_risks", "resident_top_risks",
-                        "subcategories", "warnings"
-                    ],
+                    required: ["neighborhood", "safety_top_risks", "liveability_highlights",
+                               "natural_disaster_concerns", "safety_categories",
+                               "liveability_categories", "warnings"],
                     additionalProperties: false
                 )
             )
@@ -222,28 +255,26 @@ enum OpenAIService {
         let apiKey = Secrets.openAIAPIKey
 
         let prompt = """
-        Search for current safety information about \(neighborhood), \(city), \(country).
+        Search for current safety AND liveability information about \(neighborhood), \(city), \(country).
 
-        Priority 1 — Recent news (past month): Search for recent crime \
-        incidents, safety alerts, protests, police activity, or notable \
-        events in or near \(neighborhood). Include dates and specifics.
+        Priority 1 — Safety (recent news): crime incidents, safety alerts, \
+        protests, police activity in or near \(neighborhood). Include dates.
 
-        Priority 2 — Forum posts: Search Reddit (r/travel, r/solotravel, \
-        city-specific subreddits), TripAdvisor, Nomad List, and expat \
-        forums for recent posts about safety in \(neighborhood). What do \
-        real visitors and residents say about: crime, nightlife safety, \
-        scams and fraud, harassment, street conditions, transportation safety?
+        Priority 2 — Safety (forums): Reddit, TripAdvisor, Nomad List, expat \
+        forums — what do visitors and residents say about crime, nightlife \
+        safety, scams, harassment?
 
-        Priority 3 — Anchor validation: Also briefly check current safety \
-        info for 3-4 of these reference neighborhoods that are most \
-        comparable to \(neighborhood): Barcelona Gothic Quarter, Prague \
-        Old Town, Paris Gare du Nord, Shinjuku Kabukicho, Buenos Aires \
-        San Telmo, Bangkok Khao San Road, Downtown LA. Note if any have \
-        changed significantly (gentrification, increased/decreased crime).
+        Priority 3 — Liveability: Search for information on walkability and \
+        daily errands, public transit quality, cost of living and rent, \
+        healthcare access and hospital quality, air quality (AQI data), noise \
+        levels (traffic, nightlife, airports), green space availability, \
+        climate patterns, and natural disaster history (earthquakes, floods, \
+        hurricanes, wildfires, etc.) for \(neighborhood) and \(city).
 
-        Summarize findings with specific incidents, locations, dates, and \
-        user quotes where possible. Do not editorialize — just report \
-        what you find.
+        Priority 4 — Anchor validation: Check current info for 2-3 comparable \
+        reference neighborhoods. Note significant changes.
+
+        Report findings with specifics — dates, incidents, data points, quotes.
         """
 
         let requestBody = ResponsesRequest(
@@ -316,58 +347,76 @@ enum OpenAIService {
         - Coordinates: \(latitude), \(longitude)
         """
 
-        let resolvedNeighborhood = neighborhood
-            ?? placeName
-            ?? street
-            ?? "\(latitude), \(longitude)"
+        let resolvedNeighborhood = neighborhood ?? placeName ?? street ?? "\(latitude), \(longitude)"
 
         let prompt = """
-        You are a hyperlocal travel safety rater. You MUST treat every \
-        neighborhood as distinct — Flatiron is NOT the Lower East Side, \
-        Shibuya is NOT Shinjuku, Trastevere is NOT Testaccio.
+        You are a hyperlocal area rater for both SAFETY and LIVEABILITY. \
+        Treat every neighborhood as distinct — Flatiron is NOT the Lower \
+        East Side, Trastevere is NOT Testaccio.
 
         **Device location data:**
         \(locationDetails)
 
         **Target neighborhood: \(resolvedNeighborhood)**
 
-        **Web research (recent news + forum sentiment):**
+        **Web research (recent news + forum sentiment + liveability data):**
         \(webResearch)
 
-        \(calibrationAnchors)
+        \(safetyCalibrationAnchors)
 
-        INSTRUCTIONS:
-        - Use the calibration anchors to position your ratings on a global \
-        scale. If the web research contradicts an anchor's baseline rating, \
-        trust the web research.
-        - Your ratings for \(resolvedNeighborhood) MUST be consistent with \
-        the anchor scale. If this area is safer than Barcelona Gothic \
-        Quarter for pickpocketing, score higher than 2. If more dangerous \
-        than Zurich for assault, score lower than 10.
-        - Ground your headings in the web research — cite specific \
-        incidents, forum posts, or patterns found.
+        \(liveabilityCalibrationAnchors)
 
-        Rate each subcategory 1–10 (10 = safest):
-        - petty_theft, robbery, assault, sexual_harassment, hate_crime, \
+        ═══════════════════════════════
+        SAFETY ASSESSMENT (rate 1–10, 10 = safest):
+        ═══════════════════════════════
+        Rate these 9 categories for safety_categories:
+        petty_theft, robbery, assault, sexual_harassment, hate_crime, \
         scams_and_fraud, night_safety, street_safety, transportation_safety
 
-        For each subcategory AND each warning, provide:
-        - tourist_headline: 4–6 word tourist-perspective summary (standalone phrase, \
-        no generic advice — name a pattern or place)
-        - resident_headline: 4–6 word resident-perspective summary (standalone phrase)
+        Use safety anchors to calibrate. Ground headlines in web research — \
+        cite specific streets, incidents, or patterns. Each headline: 4–6 \
+        words, standalone phrase.
 
-        Warnings (not part of overall score):
-        - solo_travel, female_travel, lgbtq_travel
+        safety_top_risks: 2–3 biggest safety concerns, each ≤8 words.
 
-        Also provide at the top level:
-        - tourist_top_risks: 2–3 biggest risks for tourists, each ≤8 words
-        - resident_top_risks: 2–3 biggest risks for residents, each ≤8 words
+        Warnings (not in safety score):
+        solo_travel, female_travel, lgbtq_travel — rate 1–10 and headline.
+
+        ═══════════════════════════════
+        LIVEABILITY ASSESSMENT (rate 1–10, 10 = best for residents):
+        ═══════════════════════════════
+        Rate these 6 categories for liveability_categories:
+
+        - walkability: Access to daily needs on foot — shops, restaurants, \
+        errands. 10 = everything walkable.
+        - transit_access: Quality, coverage, and reliability of public \
+        transport. 10 = excellent network.
+        - climate_index: Overall climate livability — temperature, humidity, \
+        seasonality, weather stability. 10 = mild, pleasant, stable year-round. \
+        Separately list specific natural disaster concerns (earthquakes, \
+        floods, hurricanes, wildfires, etc.) in natural_disaster_concerns.
+        - pollution: Composite of air quality (AQI/pollution data), noise \
+        levels (traffic, nightlife, airports), and green space availability \
+        (parks, trees, nature access). 10 = clean air, quiet, abundant green.
+        - cost_of_living: Affordability for a resident — rent, groceries, \
+        dining, transport costs. 10 = very affordable, 1 = extremely expensive.
+        - healthcare: Access to quality hospitals, clinics, specialists, \
+        emergency care. 10 = excellent access and quality.
+
+        Use liveability anchors to calibrate. Each headline: 4–6 words.
+
+        liveability_highlights: 2–3 key factors defining liveability here \
+        (notable strengths OR concerns), each ≤8 words.
+
+        natural_disaster_concerns: 0–3 specific hazards (e.g. "earthquake \
+        zone", "seasonal flooding", "hurricane corridor"). Empty array if \
+        no significant risks.
         """
 
         let requestBody = ChatRequest(
             model: "gpt-4o-mini",
             messages: [.init(role: "user", content: prompt)],
-            max_tokens: 1800,
+            max_tokens: 2200,
             response_format: responseFormat
         )
 

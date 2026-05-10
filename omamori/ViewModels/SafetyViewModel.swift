@@ -27,7 +27,15 @@ final class SafetyViewModel {
     var placeName: String?
 
     var safetyResult: SafetyAssessment?
-    var selectedMode: SafetyMode = .tourist
+
+    private static let selectedModeKey = "selectedMode"
+    var selectedMode: AssessmentMode = .safety {
+        didSet {
+            UserDefaults.standard.set(selectedMode.rawValue, forKey: Self.selectedModeKey)
+        }
+    }
+
+    var loadingPhase: String?
 
     var isLoadingLocation = false
     var isLoadingSafety = false
@@ -37,6 +45,15 @@ final class SafetyViewModel {
 
     var lastAssessedCoordinate: CLLocationCoordinate2D?
     var isResultsSheetPresented = false
+
+    init() {
+        if let raw = UserDefaults.standard.string(forKey: Self.selectedModeKey),
+           let mode = AssessmentMode(rawValue: raw) {
+            selectedMode = mode
+        }
+    }
+
+    // MARK: - Location state
 
     var isUsingCurrentLocation: Bool {
         guard let selected = selectedCoordinate, let user = userLocation else { return true }
@@ -64,18 +81,26 @@ final class SafetyViewModel {
         return activeLoc.distance(from: lastLoc) < 50
     }
 
+    // MARK: - Display-ready computed values
+
+    private var currentScore: Double {
+        switch selectedMode {
+        case .safety:      return safetyResult?.safetyScore ?? 0
+        case .liveability: return safetyResult?.liveabilityScore ?? 0
+        }
+    }
+
     var scoreColor: Color {
-        let rating = safetyResult?.overallRating ?? 0
-        switch rating {
+        switch currentScore {
         case 8...: return .green
         case 6..<8: return .yellow
         case 4..<6: return .orange
-        default: return .red
+        default:   return .red
         }
     }
 
     var scoreFraction: Double {
-        (safetyResult?.overallRating ?? 0) / 10.0
+        currentScore / 10.0
     }
 
     var sheetHeaderTitle: String {
@@ -86,56 +111,74 @@ final class SafetyViewModel {
 
     var currentTopRisks: [String] {
         guard let result = safetyResult else { return [] }
-        return selectedMode == .tourist ? result.touristTopRisks : result.residentTopRisks
+        switch selectedMode {
+        case .safety:      return result.safetyTopRisks
+        case .liveability: return result.liveabilityHighlights
+        }
+    }
+
+    var naturalDisasterConcerns: [String] {
+        safetyResult?.naturalDisasterConcerns ?? []
     }
 
     var currentCategories: [CategoryDisplayItem] {
-        guard let sub = safetyResult?.subcategories else { return [] }
+        guard let result = safetyResult else { return [] }
+        switch selectedMode {
+        case .safety:      return safetyDisplayItems(from: result.safetyCategories)
+        case .liveability: return liveabilityDisplayItems(from: result.liveabilityCategories)
+        }
+    }
 
+    var activeWarnings: [WarningDisplayItem] {
+        guard selectedMode == .safety, let result = safetyResult else { return [] }
+        let threshold = SafetyAssessment.warningThreshold
+        let w = result.warnings
+
+        let candidates: [(id: String, icon: String, name: String, cat: SafetyAssessment.Category)] = [
+            ("soloTravel",   "figure.walk",                       "Solo Travel",   w.soloTravel),
+            ("femaleTravel", "figure.dress.line.vertical.figure", "Female Travel", w.femaleTravel),
+            ("lgbtqTravel",  "rainbow",                           "LGBTQ+ Travel", w.lgbtqTravel)
+        ]
+
+        return candidates.compactMap { item in
+            guard item.cat.rating <= threshold else { return nil }
+            return WarningDisplayItem(id: item.id, icon: item.icon, name: item.name,
+                                      rating: item.cat.rating, headline: item.cat.headline)
+        }
+    }
+
+    // MARK: - Private category builders
+
+    private func safetyDisplayItems(from sub: SafetyAssessment.SafetyCategories) -> [CategoryDisplayItem] {
         let all: [(id: String, icon: String, name: String, cat: SafetyAssessment.Category)] = [
+            ("scamsAndFraud",       "creditcard.trianglebadge.exclamationmark.fill", "Scams & Fraud",      sub.scamsAndFraud),
+            ("nightSafety",         "moon.fill",                                     "Night Safety",        sub.nightSafety),
+            ("transportationSafety","bus.fill",                                      "Transportation",      sub.transportationSafety),
             ("pettyTheft",          "bag.fill",                                      "Petty Theft",         sub.pettyTheft),
             ("robbery",             "hand.raised.fill",                              "Robbery",             sub.robbery),
             ("assault",             "figure.boxing",                                 "Assault",             sub.assault),
             ("sexualHarassment",    "exclamationmark.bubble.fill",                   "Sexual Harassment",   sub.sexualHarassment),
             ("hateCrime",           "person.fill.xmark",                             "Hate Crime",          sub.hateCrime),
-            ("scamsAndFraud",       "creditcard.trianglebadge.exclamationmark.fill", "Scams & Fraud",       sub.scamsAndFraud),
-            ("nightSafety",         "moon.fill",                                     "Night Safety",        sub.nightSafety),
-            ("streetSafety",        "road.lanes",                                    "Street Safety",       sub.streetSafety),
-            ("transportationSafety","bus.fill",                                      "Transportation",      sub.transportationSafety)
+            ("streetSafety",        "road.lanes",                                    "Street Safety",       sub.streetSafety)
         ]
-
-        let touristOrder = ["scamsAndFraud", "nightSafety", "transportationSafety", "pettyTheft",
-                            "robbery", "assault", "sexualHarassment", "hateCrime", "streetSafety"]
-        let residentOrder = ["streetSafety", "assault", "nightSafety", "robbery", "pettyTheft",
-                             "sexualHarassment", "hateCrime", "scamsAndFraud", "transportationSafety"]
-
-        let order = selectedMode == .tourist ? touristOrder : residentOrder
-        let dict = Dictionary(uniqueKeysWithValues: all.map { ($0.id, $0) })
-
-        return order.compactMap { id in
-            guard let item = dict[id] else { return nil }
-            let headline = selectedMode == .tourist ? item.cat.touristHeadline : item.cat.residentHeadline
-            return CategoryDisplayItem(id: item.id, icon: item.icon, name: item.name, rating: item.cat.rating, headline: headline)
-        }
+        return all.map { CategoryDisplayItem(id: $0.id, icon: $0.icon, name: $0.name,
+                                             rating: $0.cat.rating, headline: $0.cat.headline) }
     }
 
-    var activeWarnings: [WarningDisplayItem] {
-        guard let result = safetyResult else { return [] }
-        let threshold = SafetyAssessment.warningThreshold
-        let w = result.warnings
-
-        let candidates: [(id: String, icon: String, name: String, cat: SafetyAssessment.Category)] = [
-            ("soloTravel",   "figure.walk",                        "Solo Travel",   w.soloTravel),
-            ("femaleTravel", "figure.dress.line.vertical.figure",  "Female Travel", w.femaleTravel),
-            ("lgbtqTravel",  "rainbow",                            "LGBTQ+ Travel", w.lgbtqTravel)
+    private func liveabilityDisplayItems(from live: SafetyAssessment.LiveabilityCategories) -> [CategoryDisplayItem] {
+        let all: [(id: String, icon: String, name: String, cat: SafetyAssessment.Category)] = [
+            ("costOfLiving",  "dollarsign.circle.fill", "Cost of Living", live.costOfLiving),
+            ("walkability",   "figure.walk",            "Walkability",    live.walkability),
+            ("transitAccess", "tram.fill",              "Transit Access", live.transitAccess),
+            ("healthcare",    "cross.case.fill",        "Healthcare",     live.healthcare),
+            ("pollution",     "aqi.medium",             "Pollution",      live.pollution),
+            ("climateIndex",  "cloud.sun.fill",         "Climate",        live.climateIndex)
         ]
-
-        return candidates.compactMap { item in
-            guard item.cat.rating <= threshold else { return nil }
-            let headline = selectedMode == .tourist ? item.cat.touristHeadline : item.cat.residentHeadline
-            return WarningDisplayItem(id: item.id, icon: item.icon, name: item.name, rating: item.cat.rating, headline: headline)
-        }
+        return all.map { CategoryDisplayItem(id: $0.id, icon: $0.icon, name: $0.name,
+                                             rating: $0.cat.rating, headline: $0.cat.headline) }
     }
+
+    // MARK: - Actions
 
     private let locationService = LocationService()
     private var debounceTask: Task<Void, Never>?
@@ -241,11 +284,13 @@ final class SafetyViewModel {
 
         do {
             let resolvedNeighborhood = neighborhood ?? placeName ?? city
+            loadingPhase = "Researching \(resolvedNeighborhood)..."
             let research = try await OpenAIService.fetchWebResearch(
                 neighborhood: resolvedNeighborhood,
                 city: city,
                 country: country
             )
+            loadingPhase = "Analyzing safety data..."
             safetyResult = try await OpenAIService.fetchSafetyAssessment(
                 city: city,
                 neighborhood: neighborhood,
@@ -263,6 +308,7 @@ final class SafetyViewModel {
             errorMessage = error.localizedDescription
         }
 
+        loadingPhase = nil
         isLoadingSafety = false
     }
 
