@@ -41,7 +41,7 @@ final class SafetyViewModel {
     var isLoadingSafety = false
     var isPinSettled = true
     var isDragging = false
-    var errorMessage: String?
+    var toastMessage: String?
 
     var lastAssessedCoordinate: CLLocationCoordinate2D?
     var isResultsSheetPresented = false
@@ -114,6 +114,20 @@ final class SafetyViewModel {
         switch selectedMode {
         case .safety:      return result.safetyTopRisks
         case .liveability: return result.liveabilityHighlights
+        }
+    }
+
+    var currentTopRisksTitle: String {
+        switch selectedMode {
+        case .safety:      return "Top Safety Risks"
+        case .liveability: return "Key Highlights"
+        }
+    }
+
+    var scoreLabel: String {
+        switch selectedMode {
+        case .safety:      return "Safety Score"
+        case .liveability: return "Liveability Score"
         }
     }
 
@@ -200,9 +214,16 @@ final class SafetyViewModel {
         }
     }
 
+    func showToast(_ message: String) {
+        toastMessage = message
+        Task {
+            try? await Task.sleep(for: .seconds(3))
+            toastMessage = nil
+        }
+    }
+
     func fetchLocation() async {
         isLoadingLocation = true
-        errorMessage = nil
 
         do {
             let location = try await locationService.requestLocation()
@@ -217,7 +238,7 @@ final class SafetyViewModel {
                 longitudinalMeters: 1000
             ))
         } catch {
-            errorMessage = error.localizedDescription
+            showToast("Unable to get location. Please try again.")
         }
 
         isLoadingLocation = false
@@ -279,7 +300,6 @@ final class SafetyViewModel {
               let country = country else { return }
 
         isLoadingSafety = true
-        errorMessage = nil
         safetyResult = nil
 
         do {
@@ -305,7 +325,7 @@ final class SafetyViewModel {
             )
             lastAssessedCoordinate = activeCoordinate
         } catch {
-            errorMessage = error.localizedDescription
+            showToast("Something went wrong. Please try again.")
         }
 
         loadingPhase = nil
